@@ -1,0 +1,6 @@
+flight_id,origin,destination,date,time,capacity
+FL001,Tehran,Shiraz,2025-09-01,08:30,180
+FL002,Isfahan,Tabriz,2025-09-02,12:45,150
+FL003,Mashhad,BandarAbbas,2025-09-03,16:00,200
+FL004,Tehran,Isfahan,2025-09-04,09:15,170
+FL005,Tabriz,Tehran,2025-09-05,20:30,160
