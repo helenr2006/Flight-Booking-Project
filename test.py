@@ -16,6 +16,7 @@ def load_csv(filename): # باز کردن فایل csv
 
 # === تابع‌های پنل‌ها ===
 def open_passenger_panel():
+    username = username_entry.get()
     new_win = tk.Toplevel(window)
     new_win.title("Passenger Panel")
     csv_data = load_csv('E:/Razie/Uni/Second_semester/AP/Final_Project/flights.csv')
@@ -23,17 +24,79 @@ def open_passenger_panel():
     tk.Label(new_win, text="Welcome, Passenger!").pack()
     button = tk.Button(new_win, text="flights list", command=lambda:(flight_list(csv_data)))
     button.pack()
-    button = tk.Button(new_win, text="Reservations", command=lambda:reservations_list(csv_data_2,username))
+    button = tk.Button(new_win, text="Reservations", command=lambda:reservations_list(csv_data_2, username))
     button.pack()
     
 
-def open_admin_panel(): 
+def open_admin_panel():
     new_win = tk.Toplevel(window)
     new_win.title("Admin Panel")
-    tk.Label(new_win, text="Welcome, Flight Manager!").pack()
+    file_path = 'E:/Razie/Uni/Second_semester/AP/Final_Project/flights.csv'
     csv_data = load_csv('E:/Razie/Uni/Second_semester/AP/Final_Project/flights.csv')
+    tk.Label(new_win, text="Welcome, Flight Manager!").pack(pady = 10)
     button = tk.Button(new_win, text="flights list", command=lambda:(flight_list(csv_data)))
     button.pack()
+    
+    add_fields = ['Flight ID' , 'From' , 'To' , 'Date' , 'Time' ,'Capacity']
+    add_entries = []
+
+    for field in add_fields:
+        tk.Label(new_win , text=field).pack()
+        entry = tk.Entry(new_win)
+        entry.pack()
+        add_entries.append(entry)
+
+    def add_flight():
+        new_flight = [entry.get() for entry in add_entries]
+        print("New flight to be added : " , new_flight)
+        if all(new_flight):
+            try:
+                with open(file_path , mode='a' , newline='' , encoding='utf-8') as file :
+                    writer = csv.writer(file)
+                    writer.writerow(new_flight)
+
+                    messagebox.showinfo("Success" , "Flight added successfully!")
+                for entry in add_entries:
+                    entry.delete(0 , tk.END)
+            except Exception as e:
+                messagebox.showerror("Error" , f"Failed add flight : {e}")
+        else:
+            messagebox.showerror("Error" , "All fields must be filled.")            
+
+    tk.Button(new_win , text="Add flight" , command=add_flight).pack(pady=10)
+
+    tk.Label(new_win, text="Delete Flight by ID").pack(pady=10) 
+    delete_id_entry = tk.Entry(new_win)
+    delete_id_entry.pack()
+
+    def delete_flight():
+            flight_id = delete_id_entry.get()
+            if not flight_id:
+                messagebox.showwarning("Warning", "Please enter Flight ID.")
+                return
+            try:
+                csv_data = load_csv(file_path)
+                updated_data = [csv_data[0]]
+                deleted = False
+
+                for row in csv_data[1:]:
+                    if row[0] != flight_id:
+                        updated_data.append(row)
+                    else:
+                        deleted = True
+                if deleted:
+                    with open(file_path , mode='w' , newline='' , encoding='utf=8') as file :
+                        writer = csv.writer(file)
+                        writer.writerows(updated_data)
+                    messagebox.showinfo("Success" , f"Flight with ID '{flight_id}' deleted.")
+                    delete_id_entry.delete(0 , tk.END)
+                else:
+                    messagebox.showerror("Error" , f"No flight with ID '{flight_id}' found.") 
+            except Exception as e :
+                messagebox.showerror("Error" , f"Failed to delete flight : {e}")
+    tk.Button(new_win , text="Delete Flight" , command= delete_flight).pack(pady=5)
+    
+
     
 
 def flight_list(data):
@@ -54,26 +117,42 @@ def flight_list(data):
         tree.insert('', tk.END, values=row)
 
 def reservations_list(data, username, parent=None):
-    top = tk.Toplevel(parent) if parent else tk.Toplevel()
-    top.title("Flights Data")
+    try:
+        top = tk.Toplevel(parent) if parent else tk.Toplevel()
+        top.title("Reservations List")  # More accurate title
+        
+        # Check if data is empty or None
+        if not data or len(data) < 1:
+            tk.Label(top, text="No data available").pack(pady=10)
+            return
+            
+        columns = data[0]  # ['username', 'flight_id']
+        
+        # Handle case where entered_username is empty/None
+        if not username:
+            tk.Label(top, text="No username provided").pack(pady=10)
+            return
+            
+        filtered_rows = [row for row in data[1:] if len(row) > 0 and row[0].lower() == username.lower()]
 
-    columns = data[0]  # ['username', 'flight_id']
+        if not filtered_rows:
+            tk.Label(top, text=f"No reservations found for username: {username}").pack(pady=10)
+            return
+            
+        tree = ttk.Treeview(top, columns=columns, show='headings')
+        tree.pack(fill=tk.BOTH, expand=True)
 
-    filtered_rows = [row for row in data[1:] if len(row) > 0 and row[0].lower() == username.lower()]
+        for col in columns:
+            tree.heading(col, text=col)
+            tree.column(col, width=100)
 
-    tree = ttk.Treeview(top, columns=columns, show='headings')
-    tree.pack(fill=tk.BOTH, expand=True)
-
-    for col in columns:
-        tree.heading(col, text=col)
-        tree.column(col, width=100)
-
-    for row in filtered_rows:
-        tree.insert('', tk.END, values=row)
-
-    if not filtered_rows:
-        tk.Label(top, text=f"No reservations found for username: {username}").pack(pady=10)
-
+        for row in filtered_rows:
+            tree.insert('', tk.END, values=row)
+            
+    except Exception as e:
+        # Provide error feedback if something goes wrong
+        error_window = tk.Toplevel(top if 'top' in locals() else None)
+        tk.Label(error_window, text=f"An error occurred: {str(e)}").pack(pady=10)
 
 
 # === فرم ثبت‌نام ===
@@ -174,4 +253,3 @@ submit_button = tk.Button(window, text="Submit", command=login)
 submit_button.pack(pady=10)
 
 window.mainloop()
-# testing
