@@ -15,19 +15,16 @@ CSV files (auto-created if not exist):
 - flights.csv: id,origin,destination,date,time,capacity
 - reservations.csv: username,flight_id,timestamp
 """
-from __future__ import annotations # نگه داشتن تایپ ها به صورت string
-import tkinter as tk # ساختن رابط کاربری گرافیکی
-from tkinter import ttk, messagebox # نمایش پیام های خطا و ورود کاربر
-from pathlib import Path #برای قابل اجرا کردن برنامه در هرجا
-import csv  # برای خواندن و نوشتن در فایل csv
-from datetime import datetime # برای استفاده از زمان
+from __future__ import annotations  # نگه داشتن تایپ ها به صورت string
+import tkinter as tk  # ساختن رابط کاربری گرافیکی
+from tkinter import ttk, messagebox  # نمایش پیام ها
+from pathlib import Path  # برای مسیر فایل ها
+import csv  # خواندن/نوشتن CSV
+from datetime import datetime  # برای زمان
 
 APP_TITLE = "Airlines"
 
 # ---------------------- Data Layer ----------------------
-# این کلاس مسئول مدیریت مسیر فایل‌های داده‌ای (CSV) است
-# مسیر فایل‌ها تنظیم می‌گردد.
-# اطمینان حاصل می‌شود که فایل‌ها موجودند (یا ساخته می‌شوند)
 class DataStore:
     def __init__(self, base_dir: Path):
         self.base_dir = base_dir
@@ -46,30 +43,28 @@ class DataStore:
             self._write_rows(self.reservations, [["username", "flight_id", "timestamp"]])
 
     # --- helpers ---
-    # این تابع پس از خواندن فایل CSV یک لیست از ردیف‌ها (هر ردیف خودش یک لیست از رشته‌ها است) می سازد
     def _read_rows(self, path: Path) -> list[list[str]]:
         with path.open(newline='', encoding='utf-8') as f:
             return list(csv.reader(f))
-    #بازنویسی کامل یک فایل CSV (مثلا وقتی بخواهی همه‌ی داده‌ها را ذخیره کنی بعد از تغییرات)
+
     def _write_rows(self, path: Path, rows: list[list[str]]):
         with path.open('w', newline='', encoding='utf-8') as f:
             w = csv.writer(f)
             w.writerows(rows)
-    #زمانی که بخواهی فقط یک کاربر/پرواز/رزرو جدید اضافه کنی، بدون دست زدن به بقیه داده‌ها
+
     def _append_row(self, path: Path, row: list[str]):
         with path.open('a', newline='', encoding='utf-8') as f:
             w = csv.writer(f)
             w.writerow(row)
 
     # --- users ---
-    # این تابع کاربران راجست و جو میکند
     def find_user(self, username: str) -> tuple[str, str, str] | None:
         rows = self._read_rows(self.users)
         for r in rows[1:]:
             if len(r) >= 3 and r[0] == username:
-                return tuple(r[:3])  # username, password, role
+                return tuple(r[:3])
         return None
-    #این تابع کاربران را اضافه میکند
+
     def add_user(self, username: str, password: str, role: str) -> bool:
         if self.find_user(username):
             return False
@@ -77,13 +72,23 @@ class DataStore:
         return True
 
     # --- flights ---
-    #پرواز ها به صورت رشته از فایل برمیگرداند
     def list_flights(self) -> list[list[str]]:
         return self._read_rows(self.flights)
-    #پرواز اضافه میکند
-    def add_flight(self, fid: str, origin: str, dest: str, date: str, time_: str, capacity: str) -> None:
+
+    def get_flight_by_id(self, fid: str) -> list[str] | None:
+        rows = self._read_rows(self.flights)
+        for r in rows[1:]:
+            if r and r[0] == fid:
+                return r
+        return None
+
+    def add_flight(self, fid: str, origin: str, dest: str, date: str, time_: str, capacity: str) -> bool:
+        # 1) جلوگیری از ID تکراری
+        if self.get_flight_by_id(fid):
+            return False
         self._append_row(self.flights, [fid, origin, dest, date, time_, capacity])
-    #پرواز های موجود را پاک میکند
+        return True
+
     def delete_flight(self, fid: str) -> bool:
         rows = self._read_rows(self.flights)
         header, body = rows[0], rows[1:]
@@ -94,30 +99,39 @@ class DataStore:
         return True
 
     # --- reservations ---
-    #رزرو هارا به صورت رشته برمیگرداند
     def list_reservations(self) -> list[list[str]]:
         return self._read_rows(self.reservations)
 
     def list_user_reservations(self, username: str) -> list[list[str]]:
         rows = self._read_rows(self.reservations)
+        # هدر + رزروهای کاربر
         return [r for r in rows if r and (r[0] == username or r[0] == 'username')]
-    #تعداد رزرو های یک پرواز را میشمارد
+
+    def list_reservations_for_flight(self, fid: str) -> list[list[str]]:
+        rows = self._read_rows(self.reservations)
+        header = rows[0] if rows else ["username", "flight_id", "timestamp"]
+        body = [r for r in rows[1:] if r and r[1] == fid]
+        return [header] + body
+
+    def list_passengers_for_flight(self, fid: str) -> list[str]:
+        rows = self._read_rows(self.reservations)
+        return [r[0] for r in rows[1:] if r and r[1] == fid]
+
     def count_reservations_for_flight(self, fid: str) -> int:
         rows = self._read_rows(self.reservations)
         return sum(1 for r in rows[1:] if r and r[1] == fid)
-    #پیدا کردن پرواز ها بر اساس ID
-    def get_flight_by_id(self, fid: str) -> list[str] | None:
-        rows = self._read_rows(self.flights)
-        for r in rows[1:]:
-            if r and r[0] == fid:
-                return r
-        return None
-    # پروازی را رزرو میکند
+
+    def has_reservation(self, username: str, fid: str) -> bool:
+        rows = self._read_rows(self.reservations)
+        return any(r for r in rows[1:] if r and r[0] == username and r[1] == fid)
+
     def add_reservation(self, username: str, fid: str) -> tuple[bool, str]:
         flight = self.get_flight_by_id(fid)
         if not flight:
             return False, "Flight not found."
-        # ظرفیت را بررسی میکند
+        # جلوگیری از رزرو تکراری برای همان کاربر/پرواز
+        if self.has_reservation(username, fid):
+            return False, "You already reserved this flight."
         try:
             cap = int(flight[5])
         except Exception:
@@ -129,15 +143,23 @@ class DataStore:
         self._append_row(self.reservations, [username, fid, ts])
         return True, "Reservation completed."
 
+    def delete_reservation(self, username: str, fid: str) -> bool:
+        rows = self._read_rows(self.reservations)
+        header, body = rows[0], rows[1:]
+        new_body = [r for r in body if not (r and r[0] == username and r[1] == fid)]
+        if len(new_body) == len(body):
+            return False
+        self._write_rows(self.reservations, [header] + new_body)
+        return True
+
 
 # ---------------------- UI Layer ----------------------
-#از کتابخانه Tkinter برای ساخت رابط کاربری (GUI) استفاده می‌کند.
 class AirlinesApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title(APP_TITLE)
-        self.geometry("980x640")
-        self.minsize(900, 560)
+        self.geometry("1200x680")
+        self.minsize(1100, 600)
 
         # data store next to script file
         base = Path(__file__).resolve().parent
@@ -157,7 +179,7 @@ class AirlinesApp(tk.Tk):
             frame.grid(row=0, column=0, sticky='nsew')
         self.show("LoginFrame")
         self._tick_clock()
-    #وظیفه‌ی تنظیم ظاهر و استایل ویجت‌های ttk (تم‌های Tkinter) را دارد.
+
     def _setup_style(self):
         try:
             self.style.theme_use('clam')
@@ -168,19 +190,19 @@ class AirlinesApp(tk.Tk):
         self.style.configure('Card.TFrame', relief='flat', borderwidth=0)
         self.style.configure('Header.TLabel', font=('Segoe UI', 18, 'bold'))
         self.style.configure('Hint.TLabel', foreground='#6b7280')
-    #وظیفه‌ی ساختن سربرگ (Header) بالای پنجره برنامه رو داره.
+
     def _build_header(self):
         top = ttk.Frame(self, padding=(16, 12))
         top.pack(fill='x')
         ttk.Label(top, text="✈ Airlines System", style='Header.TLabel').pack(side='left')
         self.clock_lbl = ttk.Label(top, text="--:--:--", style='Hint.TLabel')
         self.clock_lbl.pack(side='right')
-    #این تابع کارش نمایش و به‌روز کردن ساعت زنده در بالای برنامه است.
+
     def _tick_clock(self):
         now = datetime.now().strftime('%Y-%m-%d  %H:%M:%S')
         self.clock_lbl.config(text=now)
         self.after(1000, self._tick_clock)
-    #این متد مسئول نمایش یک صفحه (Frame) از بین فریم‌های مختلف برنامه است.
+
     def show(self, name: str):
         frame = self.frames[name]
         frame.tkraise()
@@ -189,7 +211,7 @@ class AirlinesApp(tk.Tk):
 
 
 # ---------------------- Frames ----------------------
-# فرم ساخته شده برای login
+# فرم لاگین
 class LoginFrame(ttk.Frame):
     def __init__(self, parent, app: AirlinesApp):
         super().__init__(parent, padding=24)
@@ -263,6 +285,7 @@ class LoginFrame(ttk.Frame):
         ttk.Button(frm, text="ایجاد حساب", command=do_signup).grid(row=4, column=0, columnspan=2, pady=12)
 
 
+# پنل مسافر
 class PassengerFrame(ttk.Frame):
     def __init__(self, parent, app: AirlinesApp):
         super().__init__(parent, padding=16)
@@ -277,7 +300,7 @@ class PassengerFrame(ttk.Frame):
         body = ttk.Frame(self)
         body.pack(fill='both', expand=True, pady=(10,0))
 
-        # left: flights list
+        # لیست پروازها
         flights_card = ttk.Labelframe(body, text="لیست پروازها", padding=12)
         flights_card.pack(side='left', fill='both', expand=True, padx=(0,8))
 
@@ -294,7 +317,7 @@ class PassengerFrame(ttk.Frame):
         self.reserve_id.pack(side='left', padx=6)
         ttk.Button(reserve_bar, text="رزرو", command=self.reserve).pack(side='left')
 
-        # right: my reservations
+        # رزروهای من
         my_card = ttk.Labelframe(body, text="رزروهای من", padding=12)
         my_card.pack(side='left', fill='both', expand=True, padx=(8,0))
         self.my_tv = ttk.Treeview(my_card, columns=("username","flight_id","timestamp"), show='headings', height=12)
@@ -336,6 +359,7 @@ class PassengerFrame(ttk.Frame):
             messagebox.showerror("ناموفق", msg)
 
 
+# پنل مدیر
 class AdminFrame(ttk.Frame):
     def __init__(self, parent, app: AirlinesApp):
         super().__init__(parent, padding=16)
@@ -350,45 +374,83 @@ class AdminFrame(ttk.Frame):
         body = ttk.Frame(self)
         body.pack(fill='both', expand=True, pady=(10,0))
 
-        # left: flights
+        # چپ: لیست پروازها
         left = ttk.Frame(body)
         left.pack(side='left', fill='both', expand=True, padx=(0,8))
 
         flights_card = ttk.Labelframe(left, text="لیست پروازها", padding=12)
         flights_card.pack(fill='both', expand=True)
 
-        self.tv = ttk.Treeview(flights_card, columns=("id","origin","destination","date","time","capacity"), show='headings', height=14)
+        self.tv = ttk.Treeview(flights_card, columns=("id","origin","destination","date","time","capacity"), show='headings', height=16)
         for c in ("id","origin","destination","date","time","capacity"):
             self.tv.heading(c, text=c)
-            self.tv.column(c, width=100)
+            self.tv.column(c, width=110)
         self.tv.pack(fill='both', expand=True)
 
         ttk.Button(flights_card, text="بازخوانی", command=self.refresh).pack(pady=8)
 
-        # right: add/delete
+        # میانه: افزودن/حذف پرواز
         right = ttk.Labelframe(body, text="افزودن / حذف پرواز", padding=12)
         right.pack(side='left', fill='y', padx=(8,0))
 
-        self.e_id = ttk.Entry(right); self._l(right, "ID:").grid(row=0, column=0, sticky='e'); self.e_id.grid(row=0, column=1, pady=4, padx=6)
-        self.e_o = ttk.Entry(right); self._l(right, "From:").grid(row=1, column=0, sticky='e'); self.e_o.grid(row=1, column=1, pady=4, padx=6)
-        self.e_d = ttk.Entry(right); self._l(right, "To:").grid(row=2, column=0, sticky='e'); self.e_d.grid(row=2, column=1, pady=4, padx=6)
-        self.e_date = ttk.Entry(right); self._l(right, "Date (YYYY-MM-DD):").grid(row=3, column=0, sticky='e'); self.e_date.grid(row=3, column=1, pady=4, padx=6)
-        self.e_time = ttk.Entry(right); self._l(right, "Time (HH:MM):").grid(row=4, column=0, sticky='e'); self.e_time.grid(row=4, column=1, pady=4, padx=6)
-        self.e_cap = ttk.Entry(right); self._l(right, "Capacity:").grid(row=5, column=0, sticky='e'); self.e_cap.grid(row=5, column=1, pady=4, padx=6)
+        self.e_id = ttk.Entry(right); ttk.Label(right, text="ID:").grid(row=0, column=0, sticky='e'); self.e_id.grid(row=0, column=1, pady=4, padx=6)
+        self.e_o = ttk.Entry(right); ttk.Label(right, text="From:").grid(row=1, column=0, sticky='e'); self.e_o.grid(row=1, column=1, pady=4, padx=6)
+        self.e_d = ttk.Entry(right); ttk.Label(right, text="To:").grid(row=2, column=0, sticky='e'); self.e_d.grid(row=2, column=1, pady=4, padx=6)
+        self.e_date = ttk.Entry(right); ttk.Label(right, text="Date (YYYY-MM-DD):").grid(row=3, column=0, sticky='e'); self.e_date.grid(row=3, column=1, pady=4, padx=6)
+        self.e_time = ttk.Entry(right); ttk.Label(right, text="Time (HH:MM):").grid(row=4, column=0, sticky='e'); self.e_time.grid(row=4, column=1, pady=4, padx=6)
+        self.e_cap = ttk.Entry(right); ttk.Label(right, text="Capacity:").grid(row=5, column=0, sticky='e'); self.e_cap.grid(row=5, column=1, pady=4, padx=6)
 
         ttk.Button(right, text="افزودن پرواز", command=self.add).grid(row=6, column=0, columnspan=2, pady=(8,4))
 
         ttk.Separator(right, orient='horizontal').grid(row=7, column=0, columnspan=2, sticky='ew', pady=8)
         self.del_id = ttk.Entry(right)
-        self._l(right, "Delete by ID:").grid(row=8, column=0, sticky='e')
+        ttk.Label(right, text="Delete by ID:").grid(row=8, column=0, sticky='e')
         self.del_id.grid(row=8, column=1, padx=6, pady=4)
         ttk.Button(right, text="حذف", command=self.delete).grid(row=9, column=0, columnspan=2, pady=(4,0))
 
-    def _l(self, parent, text):
-        return ttk.Label(parent, text=text)
+        # راست: مدیریت مسافران پرواز
+        passengers_card = ttk.Labelframe(body, text="مسافران پرواز / مدیریت رزرو", padding=12)
+        passengers_card.pack(side='left', fill='both', expand=True, padx=(8,0))
+
+        top_bar = ttk.Frame(passengers_card)
+        top_bar.pack(fill='x', pady=(0,6))
+        ttk.Label(top_bar, text="Flight ID:").pack(side='left')
+        self.p_fid = ttk.Entry(top_bar, width=14)
+        self.p_fid.pack(side='left', padx=6)
+        ttk.Button(top_bar, text="نمایش مسافران", command=self.show_passengers).pack(side='left')
+
+        self.passengers_tv = ttk.Treeview(passengers_card, columns=("username","timestamp"), show='headings', height=14)
+        self.passengers_tv.heading("username", text="Username")
+        self.passengers_tv.heading("timestamp", text="Reserved at")
+        self.passengers_tv.column("username", width=140)
+        self.passengers_tv.column("timestamp", width=180)
+        self.passengers_tv.pack(fill='both', expand=True)
+
+        form = ttk.Frame(passengers_card)
+        form.pack(fill='x', pady=8)
+        ttk.Label(form, text="Passenger username:").grid(row=0, column=0, sticky='e')
+        self.p_username = ttk.Entry(form, width=18)
+        self.p_username.grid(row=0, column=1, padx=6, pady=4)
+        ttk.Button(form, text="افزودن به پرواز", command=self.add_passenger).grid(row=0, column=2, padx=4)
+        ttk.Button(form, text="حذف از پرواز", command=self.del_passenger).grid(row=0, column=3, padx=4)
+
+        # کلیک روی لیست پروازها → پر کردن Flight ID
+        self.tv.bind('<<TreeviewSelect>>', self._on_flight_select)
 
     def on_show(self):
         self.refresh()
+
+    def _on_flight_select(self, _):
+        sel = self.tv.selection()
+        if not sel:
+            return
+        vals = self.tv.item(sel[0], 'values')
+        if vals:
+            fid = vals[0]
+            self.del_id.delete(0, 'end')
+            self.del_id.insert(0, fid)
+            self.p_fid.delete(0, 'end')
+            self.p_fid.insert(0, fid)
 
     def refresh(self):
         for i in self.tv.get_children():
@@ -407,7 +469,6 @@ class AdminFrame(ttk.Frame):
         if not all([fid, origin, dest, date, time_, cap]):
             messagebox.showwarning("خطا", "همه فیلدها را پر کنید.")
             return
-        # basic validations
         try:
             datetime.strptime(date, '%Y-%m-%d')
             datetime.strptime(time_, '%H:%M')
@@ -415,7 +476,10 @@ class AdminFrame(ttk.Frame):
         except Exception:
             messagebox.showerror("خطا", "تاریخ/ساعت یا ظرفیت نامعتبر است.")
             return
-        self.app.store.add_flight(fid, origin, dest, date, time_, cap)
+        ok = self.app.store.add_flight(fid, origin, dest, date, time_, cap)
+        if not ok:
+            messagebox.showerror("خطا", "پروازی با این شناسه وجود دارد.")
+            return
         messagebox.showinfo("موفق", "پرواز اضافه شد.")
         self.refresh()
 
@@ -430,6 +494,48 @@ class AdminFrame(ttk.Frame):
             self.refresh()
         else:
             messagebox.showerror("خطا", "پروازی با این شناسه یافت نشد.")
+
+    # --- مدیریت مسافران ---
+    def show_passengers(self):
+        fid = self.p_fid.get().strip()
+        for i in self.passengers_tv.get_children():
+            self.passengers_tv.delete(i)
+        if not fid:
+            return
+        rows = self.app.store.list_reservations_for_flight(fid)
+        for r in rows[1:]:
+            self.passengers_tv.insert('', 'end', values=(r[0], r[2]))
+
+    def add_passenger(self):
+        username = self.p_username.get().strip()
+        fid = self.p_fid.get().strip()
+        if not username or not fid:
+            messagebox.showwarning("خطا", "نام کاربری و کد پرواز را وارد کنید.")
+            return
+        # بررسی وجود کاربر
+        urec = self.app.store.find_user(username)
+        if not urec:
+            messagebox.showerror("خطا", "کاربری با این نام پیدا نشد.")
+            return
+        ok, msg = self.app.store.add_reservation(username, fid)
+        if ok:
+            messagebox.showinfo("موفق", msg)
+            self.show_passengers()
+        else:
+            messagebox.showerror("خطا", msg)
+
+    def del_passenger(self):
+        username = self.p_username.get().strip()
+        fid = self.p_fid.get().strip()
+        if not username or not fid:
+            messagebox.showwarning("خطا", "نام کاربری و کد پرواز را وارد کنید.")
+            return
+        ok = self.app.store.delete_reservation(username, fid)
+        if ok:
+            messagebox.showinfo("موفق", "رزرو حذف شد.")
+            self.show_passengers()
+        else:
+            messagebox.showerror("خطا", "رزروی با این مشخصات یافت نشد.")
 
 
 # ---------------------- Run ----------------------
